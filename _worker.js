@@ -29,6 +29,17 @@ const EGG_ART = [
 
 const STREAM_CHUNK_DELAY_MS = 80;
 
+// Pages Functions entry point: named onRequest handlers let `next()` delegate to the
+// static asset pipeline, which serves the .json files under ./public directly.
+export async function onRequest({ request, env, next }) {
+  const response = await handle(request, env);
+  return response ?? next();
+}
+
+export default {
+  fetch: (request, env) => handle(request, env),
+};
+
 function normalizeRoute(pathname) {
   let route = pathname.replace(/\/+$/, '') || '/';
   if (route.startsWith('/v1/v1/')) route = route.slice(3);
@@ -58,9 +69,9 @@ function notFound(route) {
   );
 }
 
+// Relative URLs resolve against the request origin, which is what `env.ASSETS` expects.
 async function serveStaticJson(env, request, file) {
-  const assetUrl = new URL(`/${file}`, request.url);
-  return env.ASSETS.fetch(new Request(assetUrl, request));
+  return env.ASSETS.fetch(`/${file}`);
 }
 
 async function handleChatCompletions(request) {
@@ -138,34 +149,35 @@ async function handleChatCompletions(request) {
   });
 }
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const route = normalizeRoute(url.pathname);
-    const method = request.method;
+// Returns a Response, or null when the request should fall through to static assets.
+async function handle(request, env) {
+  const url = new URL(request.url);
+  const route = normalizeRoute(url.pathname);
+  const method = request.method;
 
-    if (method === 'GET' || method === 'HEAD') {
-      if (STATIC_JSON[route]) {
-        return serveStaticJson(env, request, STATIC_JSON[route]);
-      }
-
-      const modelPath = route.match(/^\/v1\/models\/(.+)$/);
-      if (modelPath) {
-        const id = decodeURIComponent(modelPath[1]);
-        const list = await (await serveStaticJson(env, request, 'v1/models.json')).json();
-        const model = list.data.find((item) => item.id === id);
-        return model ? json(model) : notFound(route);
-      }
+  if (method === 'GET' || method === 'HEAD') {
+    if (STATIC_JSON[route]) {
+      return serveStaticJson(env, request, STATIC_JSON[route]);
     }
 
-    if (route === '/v1/chat/completions' && method === 'POST') {
-      return handleChatCompletions(request);
+    const modelPath = route.match(/^\/v1\/models\/(.+)$/);
+    if (modelPath) {
+      const id = decodeURIComponent(modelPath[1]);
+      const asset = await serveStaticJson(env, request, 'v1/models.json');
+      if (!asset.ok) return notFound(route);
+      const list = await asset.json();
+      const model = list.data.find((item) => item.id === id);
+      return model ? json(model) : notFound(route);
     }
+  }
 
-    if (route === '/v1/chat/completions' || route.startsWith('/v1/')) {
-      return notFound(route);
-    }
+  if (route === '/v1/chat/completions' && method === 'POST') {
+    return handleChatCompletions(request);
+  }
 
-    return env.ASSETS.fetch(request);
-  },
-};
+  if (route === '/v1/chat/completions' || route.startsWith('/v1/')) {
+    return notFound(route);
+  }
+
+  return null;
+}
