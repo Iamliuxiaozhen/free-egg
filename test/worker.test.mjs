@@ -10,7 +10,8 @@ const TYPES = { ".json": "application/json", ".md": "text/markdown", ".html": "t
 const base = "http://localhost";
 
 async function serveAsset(input) {
-  const url = new URL(typeof input === "string" ? input : input.url, base);
+  const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const url = new URL(raw, base);
   const file = path.join(root, "public", url.pathname === "/" ? "index.html" : url.pathname);
   try {
     const body = await readFile(file);
