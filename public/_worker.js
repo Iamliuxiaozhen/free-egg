@@ -59,7 +59,9 @@ function isAnthropicRoute(route) {
 }
 
 function anthropicRoute(route) {
-  return route.slice('/anthropic'.length);
+  const path = route.slice('/anthropic'.length);
+  // /anthropic/v1/messages and /anthropic/messages are the same endpoint.
+  return path.startsWith('/v1/') ? path.slice(3) : path;
 }
 
 function json(data, status) {
@@ -251,12 +253,12 @@ async function handle(request, env) {
   if (isAnthropicRoute(route)) {
     const anthropicPath = anthropicRoute(route);
 
-    if (anthropicPath === '/v1/messages' && method === 'POST') {
+    if (anthropicPath === '/messages' && method === 'POST') {
       return handleAnthropicMessages(request);
     }
 
     // Anthropic clients probe this pair on startup to size-configure the connection.
-    if (anthropicPath === '/v1/models' && (method === 'GET' || method === 'HEAD')) {
+    if (anthropicPath === '/models' && (method === 'GET' || method === 'HEAD')) {
       const list = await serveStaticJson(env, request, 'v1/models.json');
       if (!list.ok) return anthropicError(500, 'api_error', 'Model list is unavailable.');
       const { data } = await list.json();
