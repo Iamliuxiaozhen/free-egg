@@ -1,0 +1,23 @@
+{
+  "id": "free-egg-completion-0001",
+  "object": "chat.completion",
+  "created": 1735689600,
+  "model": "free-egg-1",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "🥚"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 1,
+    "total_tokens": 10
+  },
+  "system_fingerprint": "fp_free_egg"
+}

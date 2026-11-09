@@ -1,0 +1,16 @@
+{
+  "object": "credit_grants",
+  "total_granted": 10000.0,
+  "total_used": 0.0,
+  "total_available": 10000.0,
+  "grants": [
+    {
+      "object": "credit.grant",
+      "id": "grant-free-egg-0001",
+      "grant_amount": 10000.0,
+      "used_amount": 0.0,
+      "effective_at": 1735689600,
+      "expires_at": null
+    }
+  ]
+}

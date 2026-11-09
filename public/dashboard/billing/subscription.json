@@ -1,0 +1,19 @@
+{
+  "object": "billing_subscription",
+  "has_payment_method": false,
+  "soft_limit_usd": 10000,
+  "hard_limit_usd": 10000,
+  "system_hard_limit_usd": 10000,
+  "access_until": 2147483647,
+  "plan": {
+    "title": "Free Egg Unlimited",
+    "id": "free-egg-unlimited"
+  },
+  "account_name": "free-egg",
+  "total_granted": 10000.0,
+  "total_used": 0.0,
+  "total_available": 10000.0,
+  "total_granted_credits": 10000.0,
+  "total_used_credits": 0.0,
+  "total_available_credits": 10000.0
+}
