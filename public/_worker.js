@@ -29,6 +29,17 @@ const EGG_ART = [
 
 const STREAM_CHUNK_DELAY_MS = 80;
 
+// Anthropic requires a client-supplied x-api-key; any non-empty value is accepted.
+// x-api-key must be present even when Authorization is sent instead.
+function anthropicAuthorized(request) {
+  return Boolean(request.headers.get('x-api-key') || request.headers.get('authorization'));
+}
+
+// Anthropic error envelope: {type: "error", error: {type, message}}.
+function anthropicError(status, type, message) {
+  return json({ type: 'error', error: { type, message } }, status);
+}
+
 // Pages advanced-mode entry point. The file lives in the build output directory
 // (public/) because that is where Pages looks for `_worker.js`.
 export default {
@@ -41,6 +52,14 @@ function normalizeRoute(pathname) {
   // Billing endpoints are documented under /v1 too; the real ones live at /dashboard.
   if (route.startsWith('/v1/dashboard/')) route = route.slice(3);
   return route;
+}
+
+function isAnthropicRoute(route) {
+  return route === '/anthropic' || route.startsWith('/anthropic/');
+}
+
+function anthropicRoute(route) {
+  return route.slice('/anthropic'.length);
 }
 
 function json(data, status) {
@@ -145,12 +164,112 @@ async function handleChatCompletions(request) {
   });
 }
 
+// Anthropic Messages API (POST /anthropic/v1/messages). Streams the egg as
+// `message_start` / `content_block_delta` / `message_stop` events when `stream: true`.
+async function handleAnthropicMessages(request) {
+  if (!anthropicAuthorized(request)) {
+    return anthropicError(401, 'authentication_error', 'x-api-key header is required');
+  }
+
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    return anthropicError(400, 'invalid_request_error', 'Request body must be valid JSON.');
+  }
+
+  if (body.max_tokens === undefined || !Array.isArray(body.messages)) {
+    return anthropicError(400, 'invalid_request_error', 'messages and max_tokens are required.');
+  }
+
+  const model = body.model || 'free-egg-1';
+  const id = `msg_egg_${Math.random().toString(36).slice(2, 12)}`;
+  const lines = EGG_ART.split('\n');
+  const inputTokens = lines.length;
+  const outputTokens = lines.length;
+  const usage = (out) => ({ input_tokens: inputTokens, output_tokens: out });
+  const full = {
+    id,
+    type: 'message',
+    role: 'assistant',
+    model,
+    content: [{ type: 'text', text: EGG_ART }],
+    stop_reason: 'end_turn',
+    stop_sequence: null,
+    usage: usage(outputTokens),
+  };
+
+  if (body.stream !== true) {
+    return json(full);
+  }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (type, data) => controller.enqueue(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
+
+      try {
+        send('message_start', { type: 'message_start', message: { ...full, content: [], usage: usage(0) } });
+        send('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+        send('ping', { type: 'ping' });
+        for (const [i, line] of lines.entries()) {
+          await new Promise((resolve) => setTimeout(resolve, STREAM_CHUNK_DELAY_MS));
+          send('content_block_delta', {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'text_delta', text: i === lines.length - 1 ? line : line + '\n' },
+          });
+        }
+        send('content_block_stop', { type: 'content_block_stop', index: 0 });
+        send('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: usage(outputTokens) });
+        send('message_stop', { type: 'message_stop' });
+      } catch {
+        // Client went away mid-stream; nothing else to flush.
+      }
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
 // Every request enters here: API routes are answered from code, everything else is
 // handed to the static asset binding.
 async function handle(request, env) {
   const url = new URL(request.url);
-  const route = normalizeRoute(url.pathname);
   const method = request.method;
+
+  // Anthropic-compatible surface, mounted at /anthropic (with or without /v1).
+  const route = normalizeRoute(url.pathname);
+  if (isAnthropicRoute(route)) {
+    const anthropicPath = anthropicRoute(route);
+
+    if (anthropicPath === '/v1/messages' && method === 'POST') {
+      return handleAnthropicMessages(request);
+    }
+
+    // Anthropic clients probe this pair on startup to size-configure the connection.
+    if (anthropicPath === '/v1/models' && (method === 'GET' || method === 'HEAD')) {
+      const list = await serveStaticJson(env, request, 'v1/models.json');
+      if (!list.ok) return anthropicError(500, 'api_error', 'Model list is unavailable.');
+      const { data } = await list.json();
+      return json({
+        data: data.map(({ id, created }) => ({ type: 'model', id, display_name: id, created_at: new Date(created * 1000).toISOString() })),
+        has_more: false,
+        first_id: data[0] ? data[0].id : null,
+        last_id: data.length ? data[data.length - 1].id : null,
+      });
+    }
+
+    return anthropicError(404, 'not_found_error', `Egg not found: '${url.pathname}' has no shell to hatch from.`);
+  }
 
   if (method === 'GET' || method === 'HEAD') {
     if (STATIC_JSON[route]) {
