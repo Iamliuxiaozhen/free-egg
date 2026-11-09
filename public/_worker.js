@@ -66,7 +66,8 @@ function notFound(route) {
 
 // Relative URLs resolve against the request origin, which is what `env.ASSETS` expects.
 async function serveStaticJson(env, request, file) {
-  return env.ASSETS.fetch(`/${file}`);
+  // The ASSETS binding needs an absolute URL; a bare path throws.
+  return env.ASSETS.fetch(new URL(`/${file}`, request.url));
 }
 
 async function handleChatCompletions(request) {
