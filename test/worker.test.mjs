@@ -1,4 +1,4 @@
-import worker from "../_worker.js";
+import worker, { onRequest } from "../_worker.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -7,24 +7,27 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const TYPES = { ".json": "application/json", ".md": "text/markdown", ".html": "text/html" };
 
-const env = {
-  ASSETS: {
-    async fetch(request) {
-      const url = new URL(request.url);
-      const file = path.join(root, "public", url.pathname === "/" ? "index.html" : url.pathname);
-      try {
-        const body = await readFile(file);
-        return new Response(body, {
-          headers: { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" },
-        });
-      } catch {
-        return new Response("asset not found", { status: 404 });
-      }
-    },
-  },
-};
-
 const base = "http://localhost";
+
+async function serveAsset(input) {
+  const url = new URL(typeof input === "string" ? input : input.url, base);
+  const file = path.join(root, "public", url.pathname === "/" ? "index.html" : url.pathname);
+  try {
+    const body = await readFile(file);
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" },
+    });
+  } catch {
+    return new Response("asset not found", { status: 404 });
+  }
+}
+
+const env = { ASSETS: { fetch: serveAsset } };
+
+// `next()` emulates what Pages does after a named handler returns undefined.
+const next = () => serveAsset(base + "/");
+
 let failures = 0;
 
 function check(name, cond, extra = "") {
@@ -35,54 +38,54 @@ function check(name, cond, extra = "") {
   }
 }
 
+// Pages routes through the named onRequest handler.
+const fetch = (request) => onRequest({ request, env, next });
+
 // models list
-let res = await worker.fetch(new Request(`${base}/v1/models`), env);
+let res = await fetch(new Request(`${base}/v1/models`));
 const models = await res.json();
 check("GET /v1/models 200 + list", res.status === 200 && models.object === "list" && models.data.length === 9, res.status);
 
 // trailing slash + model detail
-res = await worker.fetch(new Request(`${base}/v1/models/gpt-4o/`), env);
+res = await fetch(new Request(`${base}/v1/models/gpt-4o/`));
 const one = await res.json();
 check("GET /v1/models/gpt-4o", one.id === "gpt-4o");
 
-res = await worker.fetch(new Request(`${base}/v1/models/nope`), env);
+res = await fetch(new Request(`${base}/v1/models/nope`));
 check("GET /v1/models/nope 404", res.status === 404);
 
 // billing
-res = await worker.fetch(new Request(`${base}/dashboard/billing/subscription`), env);
+res = await fetch(new Request(`${base}/dashboard/billing/subscription`));
 const sub = await res.json();
 check("subscription 10000", sub.hard_limit_usd === 10000 && sub.total_available === 10000);
 
-res = await worker.fetch(new Request(`${base}/v1/dashboard/billing/subscription`), env);
+res = await fetch(new Request(`${base}/v1/dashboard/billing/subscription`));
 check("/v1/dashboard alias", res.status === 200);
 
-res = await worker.fetch(new Request(`${base}/dashboard/billing/usage`), env);
+res = await fetch(new Request(`${base}/dashboard/billing/usage`));
 check("usage 200", res.status === 200);
-res = await worker.fetch(new Request(`${base}/dashboard/billing/credit_grants`), env);
+res = await fetch(new Request(`${base}/dashboard/billing/credit_grants`));
 check("credit_grants 200", res.status === 200);
 
 // non-streaming
-res = await worker.fetch(
+res = await fetch(
   new Request(`${base}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }),
   }),
-  env,
 );
 const completion = await res.json();
 check("non-streaming completion", completion.object === "chat.completion" && completion.choices[0].message.content.includes("(__)"));
 console.log("---\n" + completion.choices[0].message.content + "\n---");
 
 // streaming
-const t0 = Date.now();
-res = await worker.fetch(
+res = await fetch(
   new Request(`${base}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "gpt-4o", stream: true, messages: [] }),
   }),
-  env,
 );
 check("streaming content-type", res.headers.get("content-type").startsWith("text/event-stream"));
 let text = "";
@@ -103,19 +106,24 @@ const rebuilt = events
 check("stream rebuilds egg", rebuilt.trim() === completion.choices[0].message.content.trim());
 check("stream is incremental", Date.now() - firstChunkAt > 400, Date.now() - firstChunkAt);
 
-// 404 for unknown api route, asset fallback for others
-res = await worker.fetch(new Request(`${base}/v1/embeddings`), env);
+// 404 for unknown api route, asset fallback for everything else
+res = await fetch(new Request(`${base}/v1/embeddings`));
 check("unknown /v1 404 json", res.status === 404 && (await res.json()).error.code === "egg_not_found");
-res = await worker.fetch(new Request(`${base}/`), env);
-check("root falls back to assets", res.status === 404);
+res = await fetch(new Request(`${base}/`));
+check("root falls through to assets", res.status === 404);
+res = await fetch(new Request(`${base}/v1/not-an-endpoint`));
+check("unknown /v1/... does not fall through", res.status === 404 && (await res.json()).error);
+
+// default export still works for a plain Worker deployment
+res = await worker.fetch(new Request(`${base}/v1/models`), env);
+check("worker default export serves models", res.status === 200);
 
 // streaming to disconnected client does not throw
-res = await worker.fetch(
+res = await fetch(
   new Request(`${base}/v1/chat/completions`, {
     method: "POST",
     body: JSON.stringify({ stream: true }),
   }),
-  env,
 );
 res.body.cancel();
 
