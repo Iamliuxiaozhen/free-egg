@@ -1,13 +1,13 @@
 /**
- * free-egg — Cloudflare Pages Functions (advanced mode)
+ * free-egg — Cloudflare Pages advanced mode
  *
- * Streamed (SSE) and non-streamed egg responses are produced by the Worker code
- * in this file. Everything else in /v1 and /dashboard/billing is served directly
- * as a static JSON file from ./public, so those calls are plain edge cache hits
- * and never invoke this Worker.
+ * This file sits at the root of the build output directory (public/), which is the
+ * only place Pages looks for `_worker.js`. Streamed (SSE) and non-streamed egg
+ * responses are produced here; model and billing routes are resolved to the static
+ * .json files next to this file and served through the ASSETS binding.
  */
 
-// Paths that map to a pre-built static JSON file under ./public.
+// Paths that map to a pre-built static JSON file in this directory.
 const STATIC_JSON = {
   '/v1/models': 'v1/models.json',
   '/dashboard/billing/subscription': 'dashboard/billing/subscription.json',
@@ -29,14 +29,8 @@ const EGG_ART = [
 
 const STREAM_CHUNK_DELAY_MS = 80;
 
-// Pages Functions entry point: named onRequest handlers let `next()` delegate to the
-// static asset pipeline, which serves the .json files under ./public directly.
-// `next()` may also be unavailable; the default export below then serves assets itself.
-export async function onRequest({ request, env, next }) {
-  const response = await handle(request, env);
-  return response ?? (next ? next() : env.ASSETS.fetch(request));
-}
-
+// Pages advanced-mode entry point. The file lives in the build output directory
+// (public/) because that is where Pages looks for `_worker.js`.
 export default {
   fetch: (request, env) => handle(request, env),
 };
@@ -150,7 +144,8 @@ async function handleChatCompletions(request) {
   });
 }
 
-// Returns a Response, or null when the request should fall through to static assets.
+// Every request enters here: API routes are answered from code, everything else is
+// handed to the static asset binding.
 async function handle(request, env) {
   const url = new URL(request.url);
   const route = normalizeRoute(url.pathname);
@@ -180,5 +175,5 @@ async function handle(request, env) {
     return notFound(route);
   }
 
-  return null;
+  return env.ASSETS.fetch(request);
 }
