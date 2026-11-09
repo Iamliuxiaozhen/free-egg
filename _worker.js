@@ -30,8 +30,11 @@ const EGG_ART = [
 const STREAM_CHUNK_DELAY_MS = 80;
 
 function normalizeRoute(pathname) {
-  const stripped = pathname.replace(/\/+$/, '') || '/';
-  return stripped.startsWith('/v1/v1/') ? stripped.slice(3) : stripped;
+  let route = pathname.replace(/\/+$/, '') || '/';
+  if (route.startsWith('/v1/v1/')) route = route.slice(3);
+  // Billing endpoints are documented under /v1 too; the real ones live at /dashboard.
+  if (route.startsWith('/v1/dashboard/')) route = route.slice(3);
+  return route;
 }
 
 function json(data, status) {
