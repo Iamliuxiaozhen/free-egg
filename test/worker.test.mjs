@@ -108,7 +108,7 @@ check("stream is incremental", Date.now() - firstChunkAt > 400, Date.now() - fir
 res = await fetch(new Request(`${base}/v1/embeddings`));
 check("unknown /v1 404 json", res.status === 404 && (await res.json()).error.code === "egg_not_found");
 res = await fetch(new Request(`${base}/`));
-check("root falls through to assets", res.status === 404);
+check("root falls through to assets", res.status === 200 && (res.headers.get("content-type") || "").includes("text/html"));
 res = await fetch(new Request(`${base}/v1/not-an-endpoint`));
 check("unknown /v1/... does not fall through", res.status === 404 && (await res.json()).error);
 
