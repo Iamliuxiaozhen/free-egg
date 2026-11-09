@@ -149,13 +149,13 @@ free-egg is a single worker plus a folder of static files, so it runs on Cloudfl
 git clone https://github.com/Iamliuxiaozhen/free-egg.git
 cd free-egg
 
-# 2. Deploy (no build step required)
+# 2. Deploy the static files and _worker.js together (no build step required)
 npx wrangler pages deploy . --project-name free-egg
 
 # 3. Done — your own free egg is live at https://free-egg.pages.dev
 ```
 
-The SSE streaming endpoint is served by `_worker.js`, which is deployed along with the static files. All of the model and billing endpoints are plain `.json` assets under `public/`, so those calls are answered straight from the edge cache and never burn a function invocation.
+The SSE streaming endpoint is served by `_worker.js`, which is uploaded alongside the static files (putting it elsewhere can leave the files under `public/` out of the deployment). All of the model and billing endpoints are plain `.json` assets under `public/`, so those calls are answered straight from the edge cache and never burn a function invocation.
 
 ---
 
