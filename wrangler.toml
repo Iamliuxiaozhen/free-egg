@@ -1,0 +1,17 @@
+# Cloudflare Pages configuration for free-egg.
+#
+# With `pages_build_output_dir` set, Cloudflare treats this repository as a Pages
+# project and uses the deploy command below, so there is no build step and no
+# build output directory to guess in the dashboard.
+#
+#   npx wrangler pages deploy --project-name free-egg
+#
+# The static files under public/ are uploaded as-is and `_worker.js` at the
+# repository root is picked up as the Pages advanced-mode entry point.
+
+name = "free-egg"
+compatibility_date = "2025-11-01"
+pages_build_output_dir = "./public"
+
+[observability]
+enabled = true
