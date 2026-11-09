@@ -31,9 +31,10 @@ const STREAM_CHUNK_DELAY_MS = 80;
 
 // Pages Functions entry point: named onRequest handlers let `next()` delegate to the
 // static asset pipeline, which serves the .json files under ./public directly.
+// `next()` may also be unavailable; the default export below then serves assets itself.
 export async function onRequest({ request, env, next }) {
   const response = await handle(request, env);
-  return response ?? next();
+  return response ?? (next ? next() : env.ASSETS.fetch(request));
 }
 
 export default {
