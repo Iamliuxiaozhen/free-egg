@@ -84,6 +84,48 @@ const res = await client.chat.completions.create({
 console.log(res.choices[0].message.content);
 ```
 
+### Anthropic-compatible API
+
+The Anthropic Messages API is mounted at `/anthropic`, so the official Anthropic SDK works with nothing more than a base URL change.
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    base_url="https://free-egg.pages.dev/anthropic",
+    api_key="sk-free-egg",  # any non-empty value; sent as x-api-key
+)
+
+with client.messages.stream(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=256,
+    messages=[{"role": "user", "content": "Hello"}],
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="")
+```
+
+```bash
+curl https://free-egg.pages.dev/anthropic/v1/messages \
+  -H "x-api-key: sk-free-egg" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 256,
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+`/anthropic/messages` and `/anthropic/v1/messages` are the same endpoint, so both `base_url=.../anthropic` and a client that already appends `/v1` work. Streaming (`"stream": true`) uses Anthropic's event format (`message_start`, `content_block_delta`, `message_delta`, `message_stop`); errors use Anthropic's `{"type": "error", "error": {...}}` envelope.
+
+| Endpoint | Method | Response |
+| --- | --- | --- |
+| `/anthropic/v1/messages` | POST | Message object (or SSE when `stream: true`) |
+| `/anthropic/v1/models` | GET | Anthropic-format model list |
+
+> An `x-api-key` header is required (any non-empty value). `Authorization: Bearer` is accepted as an alternative.
+
 ---
 
 ## Check your balance
