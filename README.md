@@ -149,15 +149,15 @@ free-egg is a single worker plus a folder of static files, so it runs on Cloudfl
 git clone https://github.com/Iamliuxiaozhen/free-egg.git
 cd free-egg
 
-# 2. Deploy the static files and _worker.js together (no build step required)
-npx wrangler pages deploy . --project-name free-egg
+# 2. Deploy (no build step required)
+npx wrangler pages deploy
 
 # 3. Done — your own free egg is live at https://free-egg.pages.dev
 ```
 
 The repository ships a [`wrangler.toml`](./wrangler.toml) that fixes the project name, the static output directory (`public/`) and a compatibility date, so `wrangler pages deploy` always uploads the same files. On a Git-connected project, leave the build command empty and set the build output directory to `public`.
 
-The SSE streaming endpoint is served by `_worker.js`, which is uploaded alongside the static files. All of the model and billing endpoints are plain `.json` assets under `public/`, so those calls are answered straight from the edge cache and never burn a function invocation.
+The SSE streaming endpoint is served by `public/_worker.js`. Pages only looks for `_worker.js` in the build output directory, so the file has to live there next to the assets; moving it to the repository root silently disables the API. The model and billing endpoints are plain `.json` files in the same directory, resolved through the `ASSETS` binding.
 
 ---
 
