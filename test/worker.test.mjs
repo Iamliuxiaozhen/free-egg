@@ -1,4 +1,4 @@
-import worker, { onRequest } from "../_worker.js";
+import worker from "../public/_worker.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -25,9 +25,6 @@ async function serveAsset(input) {
 
 const env = { ASSETS: { fetch: serveAsset } };
 
-// `next()` emulates what Pages does after a named handler returns undefined.
-const next = () => serveAsset(base + "/");
-
 let failures = 0;
 
 function check(name, cond, extra = "") {
@@ -38,8 +35,8 @@ function check(name, cond, extra = "") {
   }
 }
 
-// Pages routes through the named onRequest handler.
-const fetch = (request) => onRequest({ request, env, next });
+// Pages advanced mode enters through the default export.
+const fetch = (request) => worker.fetch(request, env);
 
 // models list
 let res = await fetch(new Request(`${base}/v1/models`));
@@ -116,7 +113,7 @@ check("unknown /v1/... does not fall through", res.status === 404 && (await res.
 
 // default export still works for a plain Worker deployment
 res = await worker.fetch(new Request(`${base}/v1/models`), env);
-check("worker default export serves models", res.status === 200);
+check("worker handles repeat requests", res.status === 200);
 
 // streaming to disconnected client does not throw
 res = await fetch(
