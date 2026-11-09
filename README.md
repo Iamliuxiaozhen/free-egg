@@ -155,7 +155,9 @@ npx wrangler pages deploy . --project-name free-egg
 # 3. Done — your own free egg is live at https://free-egg.pages.dev
 ```
 
-The SSE streaming endpoint is served by `_worker.js`, which is uploaded alongside the static files (putting it elsewhere can leave the files under `public/` out of the deployment). All of the model and billing endpoints are plain `.json` assets under `public/`, so those calls are answered straight from the edge cache and never burn a function invocation.
+The repository ships a [`wrangler.toml`](./wrangler.toml) that fixes the project name, the static output directory (`public/`) and a compatibility date, so `wrangler pages deploy` always uploads the same files. On a Git-connected project, leave the build command empty and set the build output directory to `public`.
+
+The SSE streaming endpoint is served by `_worker.js`, which is uploaded alongside the static files. All of the model and billing endpoints are plain `.json` assets under `public/`, so those calls are answered straight from the edge cache and never burn a function invocation.
 
 ---
 
